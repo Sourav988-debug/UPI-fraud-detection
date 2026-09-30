@@ -5,6 +5,12 @@ os.environ["FLAGGED_DB"] = os.path.join(tempfile.mkdtemp(), "test_flagged.db")
 
 from fastapi.testclient import TestClient
 from app.main import app
+from upi_fraud.config import ARTIFACT_PATH
+from upi_fraud.train import main as train_model
+
+def setup_module():
+    if not ARTIFACT_PATH.exists():
+        train_model()
 
 def test_health():
     with TestClient(app) as client:
