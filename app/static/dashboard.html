@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UPI Fraud Monitor</title>
+<style>
+:root{--bg:#0b1020;--card:#121a2e;--line:#24304a;--text:#eef3ff;--muted:#9ba8c7;--blue:#5b7cff;--red:#ef5350;--yellow:#f5b942;--green:#35c98a}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(135deg,#080d19,#111a31);color:var(--text);font:14px system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{padding:22px 28px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+h1{margin:0;font-size:22px}header span{color:var(--muted)}
+main{max-width:1200px;margin:auto;padding:24px}.grid{display:grid;gap:16px}.kpis{grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:16px}
+.card{background:rgba(18,26,46,.92);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 12px 30px rgba(0,0,0,.18)}
+.kpi small{color:var(--muted)}.kpi b{display:block;font-size:28px;margin-top:8px}
+.two{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+h2{font-size:15px;margin:0 0 14px}.status{display:inline-flex;align-items:center;gap:7px}.dot{width:9px;height:9px;border-radius:50%;background:var(--green);display:inline-block}
+form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}label{color:var(--muted);font-size:12px}input,select,button{width:100%;margin-top:5px;padding:10px;border-radius:9px;border:1px solid var(--line);background:#0c1426;color:var(--text);font:inherit}
+button{background:var(--blue);border-color:var(--blue);cursor:pointer;font-weight:600}button:hover{filter:brightness(1.1)}
+.result{margin-top:14px;padding:13px;border-radius:10px;background:#0c1426;display:none}.HIGH{color:var(--red)}.MEDIUM{color:var(--yellow)}.LOW{color:var(--green)}
+.table{overflow:auto}table{width:100%;border-collapse:collapse;min-width:650px}th,td{padding:10px 8px;text-align:left;border-bottom:1px solid var(--line)}th{color:var(--muted);font-size:12px}
+.empty{color:var(--muted);padding:18px 0}.docs{display:inline-block;margin-top:12px;color:#9db0ff;text-decoration:none}
+</style>
+</head>
+<body>
+<header><h1>🛡️ UPI Fraud Monitor</h1><span class="status"><i class="dot"></i> API Online</span></header>
+<main>
+<section class="grid kpis">
+<div class="card kpi"><small>API Status</small><b id="status">Checking...</b></div>
+<div class="card kpi"><small>Known Users</small><b id="users">-</b></div>
+<div class="card kpi"><small>Live Alerts</small><b id="alertCount">0</b></div>
+<div class="card kpi"><small>Detection Engine</small><b>3 Methods</b></div>
+</section>
+
+<section class="grid two">
+<div class="card">
+<h2>Score a transaction</h2>
+<form id="scoreForm">
+<label>Sender ID<input id="sender" value="U0001" required></label>
+<label>Receiver ID<input id="receiver" value="M0001" required></label>
+<label>Amount (₹)<input id="amount" type="number" min="1" value="5000" required></label>
+<label>Location<input id="location" value="Mumbai"></label>
+<label>Device<select id="device"><option>Android</option><option>iOS</option><option>Web</option></select></label>
+<label>Transaction Type<select id="type"><option>P2P</option><option>P2M</option><option>Bill Payment</option><option>Collect Request</option></select></label>
+<label>UPI Channel<select id="channel"><option>GPay</option><option>PhonePe</option><option>Paytm</option><option>BHIM</option></select></label>
+<div><label>&nbsp;</label><button type="submit">Analyze Transaction</button></div>
+</form>
+<div class="result" id="result"></div>
+<a class="docs" href="/docs" target="_blank">Open API documentation →</a>
+</div>
+
+<div class="card">
+<h2>Detection methods</h2>
+<p><b>IQR</b> detects unusual transaction amounts.</p>
+<p><b>Isolation Forest</b> detects multivariate anomalies.</p>
+<p><b>Time-Series</b> detects unusual transaction behaviour over time.</p>
+<p style="color:var(--muted)">A transaction is sent to review when at least one detector flags it.</p>
+</div>
+</section>
+
+<section class="card" style="margin-top:16px">
+<h2>Live flagged transactions</h2>
+<div class="table"><table><thead><tr><th>Transaction</th><th>Time</th><th>Sender</th><th>Amount</th><th>Risk</th><th>Fraud Score</th></tr></thead><tbody id="alerts"></tbody></table></div>
+</section>
+</main>
+<script>
+async function health(){
+ try{const r=await fetch('/health');const d=await r.json();document.getElementById('status').textContent='Online';document.getElementById('users').textContent=d.users_known??'-'}
+ catch(e){document.getElementById('status').textContent='Offline'}
+}
+async function loadAlerts(){
+ try{const r=await fetch('/alerts?limit=50');const rows=await r.json();document.getElementById('alertCount').textContent=rows.length;const body=document.getElementById('alerts');
+ body.innerHTML=rows.length?rows.map(x=>`<tr><td>${x.transaction_id}</td><td>${new Date(x.scored_at).toLocaleString()}</td><td>${x.sender_id}</td><td>₹${Number(x.amount).toFixed(2)}</td><td class="${x.risk_level}">${x.risk_level}</td><td>${Number(x.fraud_score).toFixed(3)}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">No flagged transactions yet.</td></tr>'}
+ catch(e){}
+}
+document.getElementById('scoreForm').addEventListener('submit',async e=>{
+ e.preventDefault();const result=document.getElementById('result');result.style.display='block';result.textContent='Analyzing...';
+ const payload={sender_id:sender.value,receiver_id:receiver.value,amount:Number(amount.value),location:location.value,device_type:device.value,transaction_type:type.value,upi_channel:channel.value};
+ try{const r=await fetch('/score',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();result.innerHTML='<b class="'+d.risk_level+'">'+d.risk_level+'</b> · Fraud score: <b>'+Number(d.fraud_score).toFixed(3)+'</b><br>Methods flagged: '+(d.methods_flagged.length?d.methods_flagged.join(', '):'None')+'<br>Needs review: '+(d.needs_review?'Yes':'No');loadAlerts()}catch(err){result.textContent='Scoring failed: '+err}
+});
+health();loadAlerts();setInterval(loadAlerts,5000);
+</script>
+</body>
+</html>
