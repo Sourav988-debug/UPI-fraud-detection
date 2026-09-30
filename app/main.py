@@ -3,8 +3,9 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 import joblib, numpy as np, pandas as pd
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-from upi_fraud.config import ARTIFACT_PATH, DATA_DIR, TXN_TYPES, CHANNELS
+from upi_fraud.config import ARTIFACT_PATH, DATA_DIR
 from upi_fraud.features import _user_features
 
 STATE={}
@@ -35,13 +36,16 @@ async def lifespan(app):
 app=FastAPI(title="UPI Fraud Detection API",version="1.0",lifespan=lifespan)
 
 @app.get("/health")
-def health(): return {"status":"ok","users_known":len(STATE["profiles"]["users"])}
+def health():
+    return {"status":"ok","users_known":len(STATE["profiles"]["users"])}
 
 @app.get("/")
-def root(): return {"service":"UPI Fraud Detection API","docs":"/docs","dashboard":"/dashboard"}
+def root():
+    return FileResponse("app/static/dashboard.html")
 
 @app.get("/dashboard")
-def dashboard(): return {"message":"Use /docs for the API. Dashboard assets are available in app/static."}
+def dashboard():
+    return FileResponse("app/static/dashboard.html")
 
 @app.post("/score")
 def score(tx:Transaction):
@@ -50,13 +54,17 @@ def score(tx:Transaction):
     row=pd.DataFrame([{"transaction_id":tx.transaction_id or f"TXN-{uuid.uuid4().hex[:12]}","timestamp":ts,"sender_id":tx.sender_id,"receiver_id":tx.receiver_id,"amount":tx.amount,"device_type":tx.device_type or prof["usual_device"] or "Android","location":tx.location or prof["home_location"] or "Unknown"}])
     hist=STATE["history"].get(tx.sender_id)
     full=row if hist is None else pd.concat([hist,row],ignore_index=True)
-    f=_user_features(full,prof); f["amount_log"]=np.log1p(f.amount); f["is_night"]=f.timestamp.dt.hour.between(0,5).astype(int)
-    cur=f.tail(1); r=STATE["detector"].predict(cur).iloc[0]
+    f=_user_features(full,prof)
+    f["amount_log"]=np.log1p(f.amount)
+    f["is_night"]=f.timestamp.dt.hour.between(0,5).astype(int)
+    cur=f.tail(1)
+    r=STATE["detector"].predict(cur).iloc[0]
     methods=[n for n,v in [("IQR",r.iqr_flag),("IsolationForest",r.if_flag),("TimeSeries",r.ts_flag)] if v]
     out={"transaction_id":row.transaction_id.iloc[0],"risk_level":str(r.risk_level),"fraud_score":float(r.fraud_score),"alert":bool(r.n_methods_flagged>=2),"needs_review":bool(r.n_methods_flagged>=1),"methods_flagged":methods}
     if out["needs_review"]:
         with sqlite3.connect(DB_PATH) as db:
-            db.execute("INSERT OR REPLACE INTO flagged_transactions VALUES(?,?,?,?,?,?)",(out["transaction_id"],datetime.now(timezone.utc).isoformat(),tx.sender_id,float(tx.amount),out["risk_level"],out["fraud_score"])); db.commit()
+            db.execute("INSERT OR REPLACE INTO flagged_transactions VALUES(?,?,?,?,?,?)",(out["transaction_id"],datetime.now(timezone.utc).isoformat(),tx.sender_id,float(tx.amount),out["risk_level"],out["fraud_score"]))
+            db.commit()
     return out
 
 @app.get("/alerts")
