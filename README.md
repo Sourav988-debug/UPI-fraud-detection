@@ -1,58 +1,218 @@
 # UPI Fraud Detection
 
-End-to-end synthetic UPI fraud detection project using behavioural features, IQR outlier detection, Isolation Forest, time-series anomaly detection, and a FastAPI scoring service.
+An end-to-end UPI fraud detection system built around behavioural profiling, statistical outlier detection, machine-learning anomaly detection, time-series signals, and a FastAPI scoring service.
 
-## Live Demo
+## Live Application
 
-**Deployed Dashboard:** https://upi-fraud-detection-hkhd.onrender.com
+- **Live dashboard:** https://upi-fraud-detection-hkhd.onrender.com
+- **API documentation:** https://upi-fraud-detection-hkhd.onrender.com/docs
+- **Health check:** https://upi-fraud-detection-hkhd.onrender.com/health
 
-**API Documentation:** https://upi-fraud-detection-hkhd.onrender.com/docs
+The deployed service trains its model during the Docker build from reproducible synthetic data, so the repository does not need to store the generated model artifact or CSV datasets.
 
-## Structure
+## Features
 
-- `upi_fraud/generate_data.py` - synthetic transaction generation
-- `upi_fraud/preprocess.py` - cleaning and preprocessing
-- `upi_fraud/features.py` - behavioural and time-series features
-- `upi_fraud/detectors.py` - IQR, Isolation Forest, time-series and combined risk logic
-- `upi_fraud/train.py` - training/evaluation pipeline
-- `app/main.py` - FastAPI backend
-- `app/static/dashboard.html` - fraud monitoring dashboard
-- `tests/test_api.py` - API tests
-- `data/` - generated transaction datasets
-- `models/` - trained model artifact
-- `reports/` - evaluation metrics and charts
+- Synthetic UPI transaction generation for reproducible development and testing
+- Per-user behavioural profiles
+- Amount and spending deviation features
+- Transaction-frequency and recipient-repetition features
+- Device and location change signals
+- IQR-based outlier detection
+- Isolation Forest anomaly detection
+- Rolling time-series anomaly detection
+- Combined LOW / MEDIUM / HIGH risk classification
+- FastAPI transaction scoring API
+- Live fraud-monitoring dashboard
+- SQLite storage for transactions flagged during live scoring
+- Docker and Render deployment
+- Automated API tests
 
-## Run locally
+## Detection Logic
+
+Three independent detectors contribute to the final decision:
+
+1. **IQR** identifies unusually large amounts, behavioural deviations, and transaction-frequency outliers.
+2. **Isolation Forest** evaluates multiple behavioural and contextual features together.
+3. **Time-Series detection** looks for sudden changes against the user's recent transaction behaviour.
+
+The combined logic is:
+
+- **0 detectors flagged:** LOW
+- **1 detector flagged:** MEDIUM
+- **2 or more detectors flagged:** HIGH
+
+The displayed fraud score is the fraction of the three detectors that flagged the transaction.
+
+## Architecture
+
+```
+Synthetic Transactions
+        |
+        v
+   Preprocessing
+        |
+        v
+Behavioural Features
+        |
+        +------------------+
+        |                  |
+        v                  v
+       IQR          Isolation Forest
+        |                  |
+        +--------+---------+
+                 |
+                 v
+          Time-Series Check
+                 |
+                 v
+       Combined Risk Engine
+                 |
+        +--------+---------+
+        |                  |
+        v                  v
+    FastAPI API       Live Dashboard
+        |
+        v
+ Flagged Transactions
+      (SQLite)
+```
+
+## Repository Structure
+
+```
+.
+├── app/
+│   ├── main.py
+│   └── static/
+│       └── dashboard.html
+├── upi_fraud/
+│   ├── config.py
+│   ├── detectors.py
+│   ├── features.py
+│   ├── generate_data.py
+│   ├── preprocess.py
+│   └── train.py
+├── tests/
+│   └── test_api.py
+├── Dockerfile
+├── .dockerignore
+├── .gitignore
+├── render.yaml
+├── railway.json
+├── requirements.txt
+└── README.md
+```
+
+Generated files such as CSV datasets, the trained Joblib artifact, reports, and the live SQLite database are created locally or during deployment and are intentionally excluded from the repository.
+
+## API Endpoints
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/` | GET | Live dashboard |
+| `/dashboard` | GET | Live dashboard |
+| `/health` | GET | Service health and known-user count |
+| `/score` | POST | Score a UPI transaction |
+| `/alerts` | GET | Return recently flagged live transactions |
+| `/docs` | GET | Interactive Swagger API documentation |
+
+### Example transaction
+
+```json
+{
+  "sender_id": "U0001",
+  "receiver_id": "M0001",
+  "amount": 5000,
+  "location": "Mumbai",
+  "device_type": "Android",
+  "transaction_type": "P2P",
+  "upi_channel": "GPay"
+}
+```
+
+## Tech Stack
+
+**Backend:** Python, FastAPI, Uvicorn
+
+**Data / ML:** Pandas, NumPy, scikit-learn, Joblib
+
+**Dashboard:** HTML, CSS, JavaScript
+
+**Database:** SQLite
+
+**Deployment:** Docker, Render
+
+**Testing:** Pytest, FastAPI TestClient
+
+## Run Locally
+
+### 1. Install dependencies
 
 ```bash
 pip install -r requirements.txt
+```
+
+### 2. Generate data and train the model
+
+```python
 python -m upi_fraud.train
-pytest -v
+```
+
+### 3. Start the API
+
+```bash
 uvicorn app.main:app --reload
 ```
 
-Dashboard: `http://localhost:8000/dashboard`
+Then open:
 
-API docs: `http://localhost:8000/docs`
+- Dashboard: http://localhost:8000
+- API docs: http://localhost:8000/docs
+- Health check: http://localhost:8000/health
 
-## Detection
+### 4. Run tests
 
-The project combines three signals:
+```bash
+pytest -v
+```
 
-1. IQR for explainable extreme-value detection.
-2. Isolation Forest for multivariate transaction anomalies.
-3. Rolling time-series checks for sudden behavioural changes.
+## Docker
 
-A transaction flagged by one method is MEDIUM risk. Two or more methods produce HIGH risk.
+Build and run the same container used for deployment:
 
-## Evaluation
-
-The supplied project evaluates detectors on a time-based holdout and reports precision, recall, F1, ROC-AUC and recall by fraud pattern in `reports/metrics.json`.
-
-The data is synthetic. The reported metrics describe this generated dataset and should not be interpreted as production fraud-detection performance.
+```bash
+docker build -t upi-fraud-detection .
+docker run -p 8000:8000 upi-fraud-detection
+```
 
 ## Deployment
 
-The application is containerized with Docker and deployed on Render.
+The project includes:
 
-Live dashboard: https://upi-fraud-detection-hkhd.onrender.com
+- `Dockerfile` for the application container
+- `render.yaml` for Render deployment configuration
+- Automatic model/data generation during the image build
+- `/health` as the service health-check endpoint
+
+The current live deployment is hosted on Render:
+
+https://upi-fraud-detection-hkhd.onrender.com
+
+## Important Limitation
+
+This project uses **synthetic transaction data**. Its fraud labels and evaluation results are intended for academic demonstration and development, not for measuring production fraud-detection performance.
+
+A production system would require validated real-world transaction data, stronger data governance, model monitoring, threshold calibration, authentication/authorization, secure secrets management, persistent production storage, and appropriate privacy and compliance controls.
+
+## Project Status
+
+**Deployment:** Live on Render
+
+**Dashboard:** Live
+
+**API:** Live
+
+**Automated tests:** Included
+
+**Data:** Synthetic
+
