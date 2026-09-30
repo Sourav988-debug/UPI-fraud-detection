@@ -2,6 +2,12 @@
 
 End-to-end synthetic UPI fraud detection project using behavioural features, IQR outlier detection, Isolation Forest, time-series anomaly detection, and a FastAPI scoring service.
 
+## Live Demo
+
+**Deployed Dashboard:** https://upi-fraud-detection-hkhd.onrender.com
+
+**API Documentation:** https://upi-fraud-detection-hkhd.onrender.com/docs
+
 ## Structure
 
 - `upi_fraud/generate_data.py` - synthetic transaction generation
@@ -47,4 +53,6 @@ The data is synthetic. The reported metrics describe this generated dataset and 
 
 ## Deployment
 
-The repository includes a Dockerfile and Railway configuration for deployment.
+The application is containerized with Docker and deployed on Render.
+
+Live dashboard: https://upi-fraud-detection-hkhd.onrender.com
